@@ -51,7 +51,7 @@ while true do
         if url == "/cel/speed" then
           uly_to_km = 9460730.4725808
           obs = celestia:getobserver()
-          obs:setspeed(intx/uly_to_km)
+          obs:setspeed((intx * speed_multi)/uly_to_km)
           flash("osc: " .. url .. " --> " .. intx)
         end
 
@@ -64,7 +64,7 @@ while true do
         -- rotate left
         if url == "/cel/rot_l" then
           obs = celestia:getobserver()
-          rot = celestia:newrotation(z_vector, left_rot_step)
+          rot = celestia:newrotation(z_vector, (left_rot_step * intx))
           obs:rotate(rot)
           flash("osc: " .. url .. " --> " .. intx)
         end
@@ -72,7 +72,7 @@ while true do
         -- rotate right
         if url == "/cel/rot_r" then
           obs = celestia:getobserver()
-          rot = celestia:newrotation(z_vector, right_rot_step)
+          rot = celestia:newrotation(z_vector, (right_rot_step * intx))
           obs:rotate(rot)
           flash("osc: " .. url .. " --> " .. intx)
         end
