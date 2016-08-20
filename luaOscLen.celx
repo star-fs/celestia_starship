@@ -16,9 +16,10 @@ udp = socket.udp()
 udp:setsockname("*", 8000)
 udp:settimeout(0)
 
--- client (todo - data entry for client address?)
 
 -- state vars
+
+planets = {}
 
 speed_multi = 1
 
@@ -33,6 +34,39 @@ y_vector = celestia:newvector(0,1,0)
 z_vector = celestia:newvector(0,0,1)
 
 obs = celestia:getobserver()
+
+
+-- functions 
+ 
+function visit_planets (planets)
+  for i,v in ipairs(planets) do
+    if v == 1 then
+      flash(i .. " -> " .. v)
+    end
+    wait(1)  
+  end
+  planets = {}
+end
+
+-- http://stackoverflow.com/questions/1426954/split-string-in-lua
+function split(pString, pPattern)
+   local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
+   local fpat = "(.-)" .. pPattern
+   local last_end = 1
+   local s, e, cap = pString:find(fpat, 1)
+   while s do
+      if s ~= 1 or cap ~= "" then
+     table.insert(Table,cap)
+      end
+      last_end = e+1
+      s, e, cap = pString:find(fpat, last_end)
+   end
+   if last_end <= #pString then
+      cap = pString:sub(last_end)
+      table.insert(Table, cap)
+   end
+   return Table
+end
 
 -- server main loop
 
@@ -53,9 +87,9 @@ while true do
  
         -- handle manual x/y control
         if url == "/cel/xy1" then
-          rot = celestia:newrotation(x_vector, math.rad(intx / 360))
+          rot = celestia:newrotation(x_vector, math.rad(intx / 180))
           obs:rotate(rot)
-          rot = celestia:newrotation(y_vector, math.rad(inty / 360))
+          rot = celestia:newrotation(y_vector, math.rad(inty / 180))
           obs:rotate(rot)
         end
 
@@ -91,7 +125,20 @@ while true do
         if url == "/cel/rot_r" then
           do_right = intx
         end
-        
+  
+        -- set planet state
+        if string.find(url, "/cel/nav/") then
+          if url ~= "/cel/nav/event/go" then
+            url_parts = split(url, "/")
+            flash("parts:" .. url_parts[3])
+            planets[url_parts[3]] = intx
+          end
+        end
+
+        if url == "/cel/nav/event/go" and intx == 1 then
+          visit_planets(planets)
+        end
+      
     end
 
     if do_left ~= 0 then
