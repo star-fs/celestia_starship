@@ -86,23 +86,27 @@ while true do
         if url == "/cel/rot_l" then
           do_left = intx
         end
-        if do_left ~= 0 then
-          obs = celestia:getobserver()
-          rot = celestia:newrotation(z_vector, (left_rot_step * intx))
-          obs:rotate(rot)
-        end
 
         -- rotate right
         if url == "/cel/rot_r" then
           do_right = intx
         end
-        if do_right ~= 0 then
-          obs = celestia:getobserver()
-          rot = celestia:newrotation(z_vector, (right_rot_step * intx))
-          obs:rotate(rot)
-        end
         
     end
+
+    if do_left ~= 0 then
+      obs = celestia:getobserver()
+      rot = celestia:newrotation(z_vector, (left_rot_step * intx))
+      obs:rotate(rot)
+      wait(0)
+    end
+    if do_right ~= 0 then
+      obs = celestia:getobserver()
+      rot = celestia:newrotation(z_vector, (right_rot_step * intx))
+      obs:rotate(rot)
+      wait(0)
+    end
+
     socket.sleep(0.01)
     wait(0)
 
