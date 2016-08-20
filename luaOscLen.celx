@@ -25,6 +25,10 @@ speed_multi = 1
 left_rot_step = math.rad(-90) / 50
 right_rot_step = math.rad(90) / 50
 
+x_vector = celestia:newvector(1,0,0)
+y_vector = celestia:newvector(0,1,0)
+z_vector = celestia:newvector(0,0,1)
+
 -- server main loop
 
 while true do
@@ -36,8 +40,6 @@ while true do
         -- handle manual x/y control
         if url == "/cel/xy1" then
           obs = celestia:getobserver()
-          x_vector = celestia:newvector(1,0,0)
-          y_vector = celestia:newvector(0,1,0)
           rot = celestia:newrotation(x_vector, math.rad(intx / 360))
           obs:rotate(rot)
           rot = celestia:newrotation(y_vector, math.rad(inty / 360))
@@ -59,15 +61,19 @@ while true do
           flash("osc: " .. url .. " --> " .. intx)
         end
 
-        -- speed multi
-        if url == "/cel/speed_multi" then
-          speed_multi = intx
+        -- rotate left
+        if url == "/cel/rot_l" then
+          obs = celestia:getobserver()
+          rot = celestia:newrotation(z_vector, left_rot_step)
+          obs:rotate(rot)
           flash("osc: " .. url .. " --> " .. intx)
         end
 
-        -- speed multi
-        if url == "/cel/speed_multi" then
-          speed_multi = intx
+        -- rotate right
+        if url == "/cel/rot_r" then
+          obs = celestia:getobserver()
+          rot = celestia:newrotation(z_vector, right_rot_step)
+          obs:rotate(rot)
           flash("osc: " .. url .. " --> " .. intx)
         end
         
