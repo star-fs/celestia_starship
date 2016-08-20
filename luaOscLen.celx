@@ -25,6 +25,9 @@ speed_multi = 1
 left_rot_step = math.rad(-90) / 30
 right_rot_step = math.rad(90) / 30
 
+do_left = 0
+do_right = 0
+
 x_vector = celestia:newvector(1,0,0)
 y_vector = celestia:newvector(0,1,0)
 z_vector = celestia:newvector(0,0,1)
@@ -34,9 +37,18 @@ z_vector = celestia:newvector(0,0,1)
 while true do
 
     data = udp:receive(4096)
+
     if data then
         url, intx, inty = osc.unpack(data)
 
+        if inty then
+          flash("osc: " .. url .. " --> " .. intx .. "/" .. inty)
+        else
+          if intx then
+            flash("osc: " .. url .. " --> " .. intx)
+          end
+        end
+ 
         -- handle manual x/y control
         if url == "/cel/xy1" then
           obs = celestia:getobserver()
@@ -44,7 +56,6 @@ while true do
           obs:rotate(rot)
           rot = celestia:newrotation(y_vector, math.rad(inty / 360))
           obs:rotate(rot)
-          flash("osc: " .. url .. " --> " .. intx .. "/" .. inty)
         end
 
         -- speed control
@@ -52,29 +63,43 @@ while true do
           uly_to_km = 9460730.4725808
           obs = celestia:getobserver()
           obs:setspeed((intx * speed_multi)/uly_to_km)
-          flash("osc: " .. url .. " --> " .. intx)
         end
 
         -- speed multi
-        if url == "/cel/speed_multi" then
-          speed_multi = intx
-          flash("osc: " .. url .. " --> " .. intx)
+        if url == "/cel/smulti/1/1" then
+          speed_multi = 1
+        end
+        if url == "/cel/smulti/2/1" then
+          speed_multi = 2
+        end
+        if url == "/cel/smulti/3/1" then
+          speed_multi = 3
+        end
+        if url == "/cel/smulti/4/1" then
+          speed_multi = 4
+        end
+        if url == "/cel/smulti/5/1" then
+          speed_multi = 5
         end
 
         -- rotate left
         if url == "/cel/rot_l" then
+          do_left = intx
+        end
+        if do_left ~= 0 then
           obs = celestia:getobserver()
           rot = celestia:newrotation(z_vector, (left_rot_step * intx))
           obs:rotate(rot)
-          flash("osc: " .. url .. " --> " .. intx)
         end
 
         -- rotate right
         if url == "/cel/rot_r" then
+          do_right = intx
+        end
+        if do_right ~= 0 then
           obs = celestia:getobserver()
           rot = celestia:newrotation(z_vector, (right_rot_step * intx))
           obs:rotate(rot)
-          flash("osc: " .. url .. " --> " .. intx)
         end
         
     end
