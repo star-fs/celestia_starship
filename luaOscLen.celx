@@ -32,6 +32,8 @@ x_vector = celestia:newvector(1,0,0)
 y_vector = celestia:newvector(0,1,0)
 z_vector = celestia:newvector(0,0,1)
 
+obs = celestia:getobserver()
+
 -- server main loop
 
 while true do
@@ -51,7 +53,6 @@ while true do
  
         -- handle manual x/y control
         if url == "/cel/xy1" then
-          obs = celestia:getobserver()
           rot = celestia:newrotation(x_vector, math.rad(intx / 360))
           obs:rotate(rot)
           rot = celestia:newrotation(y_vector, math.rad(inty / 360))
@@ -61,7 +62,6 @@ while true do
         -- speed control
         if url == "/cel/speed" then
           uly_to_km = 9460730.4725808
-          obs = celestia:getobserver()
           obs:setspeed((intx * speed_multi)/uly_to_km)
         end
 
@@ -95,13 +95,11 @@ while true do
     end
 
     if do_left ~= 0 then
-      obs = celestia:getobserver()
       rot = celestia:newrotation(z_vector, (left_rot_step * intx))
       obs:rotate(rot)
       wait(0)
     end
     if do_right ~= 0 then
-      obs = celestia:getobserver()
       rot = celestia:newrotation(z_vector, (right_rot_step * intx))
       obs:rotate(rot)
       wait(0)
