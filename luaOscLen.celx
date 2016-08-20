@@ -22,8 +22,8 @@ udp:settimeout(0)
 
 speed_multi = 1
 
-left_rot_step = math.rad(-90) / 50
-right_rot_step = math.rad(90) / 50
+left_rot_step = math.rad(-90) / 30
+right_rot_step = math.rad(90) / 30
 
 x_vector = celestia:newvector(1,0,0)
 y_vector = celestia:newvector(0,1,0)
