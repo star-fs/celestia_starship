@@ -18,41 +18,73 @@ udp:settimeout(0)
 
 -- state vars
 
-planets = {}
+local planets = {}
 
-speed_multi = 1
+local speed_multi = 1
 
-left_rot_step = math.rad(-90) / 30
-right_rot_step = math.rad(90) / 30
+local left_rot_step = math.rad(-90) / 30
+local right_rot_step = math.rad(90) / 30
 
-do_left = 0
-do_right = 0
+local do_left = 0
+local do_right = 0
 
-x_vector = celestia:newvector(1,0,0)
-y_vector = celestia:newvector(0,1,0)
-z_vector = celestia:newvector(0,0,1)
+local x_vector = celestia:newvector(1,0,0)
+local y_vector = celestia:newvector(0,1,0)
+local z_vector = celestia:newvector(0,0,1)
 
 obs = celestia:getobserver()
 
 -- functions 
  
-function visit_planets (planets)
-  for k,v in pairs(planets) do
-    planet = celestia:find("Sol/" .. v)
+function visit_planets (vplanets)
+  for k,v in pairs(vplanets) do
+
+    if v == "sol" then 
+      planet = celestia:find("Sol")
+    else
+      planet = celestia:find("Sol/" .. v)
+    end
+
     celestia:select(planet)
     obs:goto(planet, 10.0)
     name = planet:name()
     info_table = planet:getinfo()
-    celestia:print("---- Planet " .. name .. " ----\n" ..
-      "Type: " .. info_table.type .. "\n" ..
-      "Name: " .. info_table.name .. "\n" ..
-      "Oblateness: " .. info_table.oblateness .. "\n" ..
-      "Albedo: " .. info_table.albedo .. "\n" ..
-      "Radius: " .. info_table.radius .. "\n" ..
-      "Lifespan Start: " .. info_table.lifespanStart .. "\n" ..
-      "Lifespan End: " .. info_table.lifespanEnd .. "\n" ..
-      "Rotation Period: " .. info_table.rotationPeriod .. "\n" ..
-      "orbit Period: " .. info_table.orbitPeriod .. "\n", 20.0, -1, -1, 2, 25)
+
+    out = ""
+
+    if name then
+      out = out .. "---- Planet " .. name .. " ----\n"
+    end
+    if info_table.type then
+      out = out .. "Type: " .. info_table.type .. "\n"
+    end
+    if info_table.name then
+      out = out .. "Name: " .. info_table.name .. "\n"
+    end
+    if info_table.oblateness then
+      out = out .. "Oblateness: " .. info_table.oblateness .. "\n"
+    end
+    if info_table.albedo then
+      out = out .. "Albedo: " .. info_table.albedo .. "\n"
+    end
+    if info_table.radius then
+      out = out .. "Radius: " .. info_table.radius .. "\n"
+    end
+    if info_table.lifespanStart then
+      out = out .. "Lifespan Start: " .. info_table.lifespanStart .. "\n"
+    end
+    if info_table.lifespanEnd then
+      out = out .. "Lifespan End: " .. info_table.lifespanEnd .. "\n"
+    end
+    if info_table.rotationPeriod then
+      out = out .. "Rotation Period: " .. info_table.rotationPeriod .. "\n"
+    end
+    if info_table.orbitPeriod then
+      out = out .. "orbit Period: " .. info_table.orbitPeriod .. "\n"
+    end
+
+    celestia:print(out, 20.0, -1, -1, 2, 25)
+
     wait(10.0)
   end
   return {}
@@ -120,6 +152,22 @@ while true do
         if string.find(url, "/cel/smulti/") then
           url_parts = split(url, "/")
           speed_multi = toInt(url_parts[3])
+          if speed_multi == 1 then
+            speed_multi = 0.001
+          end
+          if speed_multi == 2 then
+            speed_multi = 1
+          end
+          if speed_multi == 3 then
+            speed_multi = 5
+          end
+          if speed_multi == 4 then
+            speed_multi = 10
+          end
+          if speed_multi == 5 then
+            speed_multi = 100
+          end
+
         end 
 
         -- rotate left
@@ -134,19 +182,20 @@ while true do
   
         -- set planet state
         if string.find(url, "/cel/nav/") then
-          if url ~= "/cel/nav/event/go" then
-            if intx == 1 then
+          if intx == 1 then
+            if url ~= "/cel/nav/event/go" then
               url_parts = split(url, "/")
               flash("scheduling trip to:" .. url_parts[3])
-            end
-            planets[#planets + 1] = url_parts[3]
-          else 
-            if intx ==1 then
+              planets[#planets + 1] = url_parts[3]
+            else 
               flash("starting planet tour ... ")
-              planets = visit_planets(planets)
+              visit_planets(planets)
+              planets = {}
             end
           end
         end
+
+    -- end if data
     end
 
     if do_left ~= 0 then
