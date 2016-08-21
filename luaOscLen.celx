@@ -22,8 +22,8 @@ local planets = {}
 
 local speed_multi = 1
 
-local left_rot_step = math.rad(-90) / 30
-local right_rot_step = math.rad(90) / 30
+local left_rot_step = math.rad(90) / 30
+local right_rot_step = math.rad(-90) / 30
 
 local do_left = 0
 local do_right = 0
