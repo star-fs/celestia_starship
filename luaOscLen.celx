@@ -22,6 +22,8 @@ udp:settimeout(0)
 -- state vars
 local planets = {}
 
+local jump_coords = {x = 0, y = 0, z = 0}
+
 local speed_multi = 1
 
 local left_rot_step = math.rad(90) / 30
@@ -34,7 +36,7 @@ local x_vector = celestia:newvector(1,0,0)
 local y_vector = celestia:newvector(0,1,0)
 local z_vector = celestia:newvector(0,0,1)
 
-obs = celestia:getobserver()
+local uly_to_km = 9460730.4725808
 
 -- functions 
  
@@ -46,6 +48,9 @@ function visit_planets (vplanets)
     else
       planet = celestia:find("Sol/" .. v)
     end
+
+    obs = celestia:getobserver()
+    obs:setframe(celestia:newframe("universal"))
 
     celestia:select(planet)
     obs:goto(planet, 10.0)
@@ -153,10 +158,11 @@ while true do
 
     if data then
        
+        obs = celestia:getobserver()
+        obs:setframe(celestia:newframe("universal"))
 
         url, intx, inty = osc.unpack(data)
 
-        --[[
         if inty then
           flash("osc: " .. url .. " --> " .. intx .. "/" .. inty)
         else
@@ -166,7 +172,6 @@ while true do
             intx = 0
           end
         end
-        --]]
 
         -- handle manual x/y control
         if url == "/cel/xy1" then
@@ -174,6 +179,10 @@ while true do
           obs:rotate(rot)
           rot = celestia:newrotation(y_vector, math.rad(inty / 90))
           obs:rotate(rot)
+
+          -- reset display
+          socket.udp():sendto(osc.pack('/cel/xy1', 0, 0), client_ip, client_port)
+
         end
 
         -- speed control
@@ -214,7 +223,7 @@ while true do
         end
   
         -- set planet state
-        if string.find(url, "/cel/nav/") then
+        if string.find(url, "/cel/nav/") and not string.find(url, "jmp") and not string.find(url, "jump") then
           if intx == 1 then
             if url ~= "/cel/nav/event/go" then
               url_parts = split(url, "/")
@@ -232,7 +241,7 @@ while true do
               targ = celestia:find("Sol/" .. url_parts[3])
               celestia:select(targ)
 
-              -- Obtain and print actual position of Mars
+              -- print actual position of target
               tnow = celestia:gettime()
               pos = targ:getposition(tnow)
               pos_x = pos:getx()
@@ -252,6 +261,7 @@ while true do
           end
         end
 
+        -- handle label events (aka nav aids)
         if string.find(url, "/cel/disp/") then
           url_parts = split(url, "/")
           if intx == 1 then
@@ -261,39 +271,38 @@ while true do
           end
         end
 
-        if url == '/cel/jnav/jmp_x_inc' then
-          jmpx = jmpx + 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpx', jmpx), client_ip, client_port)
-          flash("sending jmpx: " .. jmpx .. " to " .. client_ip .. ":" .. client_port)
-        end
-        if url == '/cel/jnav/jmp_x_dec' then
-          jmpx = jmpx - 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpx', jmpx), client_ip, client_port)
-          flash("sending jmpx: " .. jmpx .. " to " .. client_ip .. ":" .. client_port)
+        -- inc/dec x/y/z for hyperspace jump
+        if string.find(url, "/cel/jnav/jmp") then
+
+          if intx == 1 then
+            url_parts = split(url, "/")
+            target_parts = split(url_parts[3], "_")
+
+            if target_parts[3] == "inc" then
+              -- increment coord value
+              jump_coords[target_parts[2]] = jump_coords[target_parts[2]] + 1
+            else
+              -- decrement coord value
+              jump_coords[target_parts[2]] = jump_coords[target_parts[2]] - 1
+            end
+
+            -- update display
+            disp_url = '/cel/nav/' .. target_parts[1] .. target_parts[2]
+            socket.udp():sendto(osc.pack(disp_url, jump_coords[target_parts[2]]), client_ip, client_port)
+
+          end
         end
 
-        if url == '/cel/jnav/jmp_y_inc' then
-          jmpy = jmpy + 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpy', jmpy), client_ip, client_port)
-          flash("sending jmpy: " .. jmpy .. " to " .. client_ip .. ":" .. client_port)
-        end
-        if url == '/cel/jnav/jmp_y_dec' then
-          jmpy = jmpy - 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpy', jmpy), client_ip, client_port)
-          flash("sending jmpy: " .. jmpy .. " to " .. client_ip .. ":" .. client_port)
-        end
+        -- perform hyperspace jump
+        if url == '/cel/nav/jump' and intx == 1 then
 
-        if url == '/cel/jnav/jmp_z_inc' then
-          jmpz = jmpz + 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpz', jmpz), client_ip, client_port)
-          flash("sending jmpz: " .. jmpz .. " to " .. client_ip .. ":" .. client_port)
-        end
-        if url == '/cel/jnav/jmp_z_dec' then
-          jmpz = jmpz - 1 
-          socket.udp():sendto(osc.pack('/cel/nav/jmpz', jmpz), client_ip, client_port)
-          flash("sending jmpz: " .. jmpz .. " to " .. client_ip .. ":" .. client_port)
-        end
+          pos = celestia:newposition((jump_coords['x'] + (20000/uly_to_km)), jump_coords['y'], jump_coords['z'])
+          obs:goto(pos, 3.0)
 
+          -- wait for "jump" to complete
+          wait(3.0)
+
+        end
 
     -- end if data
     end
