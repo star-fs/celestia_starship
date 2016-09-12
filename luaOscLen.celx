@@ -10,14 +10,16 @@ local socket = require("socket")
 local osc = require("osc")
 local math = require("math")
 local table = require("table")
--- server
 
+local posix = require 'posix'
+local timersub, gettimeofday = posix.timersub, posix.gettimeofday
+
+-- server
 udp = socket.udp()
 udp:setsockname("*", 8000)
 udp:settimeout(0)
 
 -- state vars
-
 local planets = {}
 
 local speed_multi = 1
@@ -50,6 +52,7 @@ function visit_planets (vplanets)
     name = planet:name()
     info_table = planet:getinfo()
 
+    --[[
     out = ""
 
     if name then
@@ -84,10 +87,14 @@ function visit_planets (vplanets)
     end
 
     celestia:print(out, 20.0, -1, -1, 2, 25)
-
+    --]]
     wait(10.0)
   end
   return {}
+end
+
+local function isempty(s)
+  return s == nil or s == ''
 end
 
 -- http://stackoverflow.com/questions/1426954/split-string-in-lua
@@ -119,21 +126,48 @@ end
 
 -- server main loop
 
+jmpx = 0
+jmpy = 0
+jmpz = 0
+
+client_ip = ""
+client_port = 9000
+
+time_from_last = gettimeofday()
+
 while true do
 
-    data = udp:receive(4096)
+    data, client_ip, send_port = udp:receivefrom(4096)
+
+    now = gettimeofday()
+    elapsed = timersub(now, time_from_last)
+    elapsed_in_ms = elapsed.sec * 1000 + elapsed.usec / 1000
+
+    if elapsed_in_ms < 200 then
+      -- data = false
+    else 
+      time_from_last = gettimeofday()
+    end
+
+    -- flash(elapsed_in_ms)
 
     if data then
+       
+
         url, intx, inty = osc.unpack(data)
 
+        --[[
         if inty then
           flash("osc: " .. url .. " --> " .. intx .. "/" .. inty)
         else
           if intx then
             flash("osc: " .. url .. " --> " .. intx)
+          else 
+            intx = 0
           end
         end
- 
+        --]]
+
         -- handle manual x/y control
         if url == "/cel/xy1" then
           rot = celestia:newrotation(x_vector, math.rad(intx / 90))
@@ -167,7 +201,6 @@ while true do
           if speed_multi == 5 then
             speed_multi = 100
           end
-
         end 
 
         -- rotate left
@@ -187,13 +220,80 @@ while true do
               url_parts = split(url, "/")
               flash("scheduling trip to:" .. url_parts[3])
               planets[#planets + 1] = url_parts[3]
+
+              -- display target info
+              uly_to_km = 9460730.4725808
+
+              -- Set frame of reference to "universal"
+              obs = celestia:getobserver()
+              obs:setframe(celestia:newframe("universal"))
+
+              -- Find and select target
+              targ = celestia:find("Sol/" .. url_parts[3])
+              celestia:select(targ)
+
+              -- Obtain and print actual position of Mars
+              tnow = celestia:gettime()
+              pos = targ:getposition(tnow)
+              pos_x = pos:getx()
+              pos_y = pos:gety()
+              pos_z = pos:getz()
+
+              celestia:print(
+                "Actual position of " .. url_parts[3] .. ":\nX = " .. pos_x .. 
+                "\nY = " .. pos_y .. "\nZ = " ..  pos_z, 15, -1, -1, 1, 6
+              )
+
             else 
-              flash("starting planet tour ... ")
+              flash("starting autopilot ... ")
               visit_planets(planets)
               planets = {}
             end
           end
         end
+
+        if string.find(url, "/cel/disp/") then
+          url_parts = split(url, "/")
+          if intx == 1 then
+            celestia:show(url_parts[3])
+          else 
+            celestia:hide(url_parts[3])
+          end
+        end
+
+        if url == '/cel/jnav/jmp_x_inc' then
+          jmpx = jmpx + 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpx', jmpx), client_ip, client_port)
+          flash("sending jmpx: " .. jmpx .. " to " .. client_ip .. ":" .. client_port)
+        end
+        if url == '/cel/jnav/jmp_x_dec' then
+          jmpx = jmpx - 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpx', jmpx), client_ip, client_port)
+          flash("sending jmpx: " .. jmpx .. " to " .. client_ip .. ":" .. client_port)
+        end
+
+        if url == '/cel/jnav/jmp_y_inc' then
+          jmpy = jmpy + 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpy', jmpy), client_ip, client_port)
+          flash("sending jmpy: " .. jmpy .. " to " .. client_ip .. ":" .. client_port)
+        end
+        if url == '/cel/jnav/jmp_y_dec' then
+          jmpy = jmpy - 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpy', jmpy), client_ip, client_port)
+          flash("sending jmpy: " .. jmpy .. " to " .. client_ip .. ":" .. client_port)
+        end
+
+        if url == '/cel/jnav/jmp_z_inc' then
+          jmpz = jmpz + 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpz', jmpz), client_ip, client_port)
+          flash("sending jmpz: " .. jmpz .. " to " .. client_ip .. ":" .. client_port)
+        end
+        if url == '/cel/jnav/jmp_z_dec' then
+          jmpz = jmpz - 1 
+          socket.udp():sendto(osc.pack('/cel/nav/jmpz', jmpz), client_ip, client_port)
+          flash("sending jmpz: " .. jmpz .. " to " .. client_ip .. ":" .. client_port)
+        end
+
 
     -- end if data
     end
@@ -203,13 +303,14 @@ while true do
       obs:rotate(rot)
       wait(0)
     end
+
     if do_right ~= 0 then
       rot = celestia:newrotation(z_vector, (right_rot_step * intx))
       obs:rotate(rot)
       wait(0)
     end
 
-    socket.sleep(0.01)
+    -- socket.sleep(0.01)
     wait(0)
 
 end
