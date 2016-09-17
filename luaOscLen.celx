@@ -38,62 +38,32 @@ local z_vector = celestia:newvector(0,0,1)
 
 local uly_to_km = 9460730.4725808
 
+local flight_time_s = 10.0
+
+local time_at_target_s = 20.0
+
+local time_speed = 1
+
 -- functions 
  
 function visit_planets (vplanets)
   for k,v in pairs(vplanets) do
 
-    if v == "sol" then 
-      planet = celestia:find("Sol")
-    else
-      planet = celestia:find("Sol/" .. v)
-    end
+    if v ~= "" then 
 
-    obs = celestia:getobserver()
-    obs:setframe(celestia:newframe("universal"))
+      if v == "sol" then 
+        planet = celestia:find("Sol")
+      else
+        planet = celestia:find(v)
+      end
 
-    celestia:select(planet)
-    obs:goto(planet, 10.0)
-    name = planet:name()
-    info_table = planet:getinfo()
+      obs = celestia:getobserver()
+      obs:setframe(celestia:newframe("universal"))
 
-    --[[
-    out = ""
-
-    if name then
-      out = out .. "---- Planet " .. name .. " ----\n"
+      celestia:select(planet)
+      obs:goto(planet, flight_time_s)
+      wait(time_at_target_s)
     end
-    if info_table.type then
-      out = out .. "Type: " .. info_table.type .. "\n"
-    end
-    if info_table.name then
-      out = out .. "Name: " .. info_table.name .. "\n"
-    end
-    if info_table.oblateness then
-      out = out .. "Oblateness: " .. info_table.oblateness .. "\n"
-    end
-    if info_table.albedo then
-      out = out .. "Albedo: " .. info_table.albedo .. "\n"
-    end
-    if info_table.radius then
-      out = out .. "Radius: " .. info_table.radius .. "\n"
-    end
-    if info_table.lifespanStart then
-      out = out .. "Lifespan Start: " .. info_table.lifespanStart .. "\n"
-    end
-    if info_table.lifespanEnd then
-      out = out .. "Lifespan End: " .. info_table.lifespanEnd .. "\n"
-    end
-    if info_table.rotationPeriod then
-      out = out .. "Rotation Period: " .. info_table.rotationPeriod .. "\n"
-    end
-    if info_table.orbitPeriod then
-      out = out .. "orbit Period: " .. info_table.orbitPeriod .. "\n"
-    end
-
-    celestia:print(out, 20.0, -1, -1, 2, 25)
-    --]]
-    wait(10.0)
   end
   return {}
 end
@@ -154,8 +124,6 @@ while true do
       time_from_last = gettimeofday()
     end
 
-    -- flash(elapsed_in_ms)
-
     if data then
        
         obs = celestia:getobserver()
@@ -173,11 +141,16 @@ while true do
           end
         end
 
+        socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+        socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
+
+        socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+
         -- handle manual x/y control
         if url == "/cel/xy1" then
           rot = celestia:newrotation(x_vector, math.rad(intx / 90))
           obs:rotate(rot)
-          rot = celestia:newrotation(y_vector, math.rad(inty / 90))
+          rot = celestia:newrotation(y_vector, math.rad(inty / -90))
           obs:rotate(rot)
 
           -- reset display
@@ -202,13 +175,13 @@ while true do
             speed_multi = 1
           end
           if speed_multi == 3 then
-            speed_multi = 5
-          end
-          if speed_multi == 4 then
             speed_multi = 10
           end
-          if speed_multi == 5 then
+          if speed_multi == 4 then
             speed_multi = 100
+          end
+          if speed_multi == 5 then
+            speed_multi = 1000
           end
         end 
 
@@ -224,6 +197,19 @@ while true do
   
         -- set planet state
         if string.find(url, "/cel/nav/") and not string.find(url, "jmp") and not string.find(url, "jump") then
+          if intx == 0 then
+            if url ~= "/cel/nav/event/go" then
+              url_parts = split(url, "/")
+              -- remove the planet from the itenerary
+              for i, v in ipairs (planets) do
+                if v == url_parts[3] then
+                  flash("removed " .. url_parts[3] .. " from itenerary.")
+                  planets[i] = ""
+                end
+              end
+            end 
+          end
+
           if intx == 1 then
             if url ~= "/cel/nav/event/go" then
               url_parts = split(url, "/")
@@ -271,40 +257,65 @@ while true do
           end
         end
 
+        -- inc/dec/ time of flight secs
+        if url == "/cel/autop/fts_inc" and intx == 1 then
+          flight_time_s = flight_time_s + 1
+          socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+        end
+        if url == "/cel/autop/fts_dec" and intx == 1 then
+          flight_time_s = flight_time_s - 1
+          socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+        end
+        if url == "/cel/autop/tats_inc" and intx == 1 then
+          time_at_target_s = time_at_target_s + 1
+          socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
+        end
+        if url == "/cel/autop/tats_dec" and intx == 1 then
+          time_at_target_s = time_at_target_s - 1
+          socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
+        end
+
         -- inc/dec x/y/z for hyperspace jump
         if string.find(url, "/cel/jnav/jmp") then
-
           if intx == 1 then
             url_parts = split(url, "/")
             target_parts = split(url_parts[3], "_")
-
+            delta = 0
             if target_parts[3] == "inc" then
-              -- increment coord value
-              jump_coords[target_parts[2]] = jump_coords[target_parts[2]] + 1
-            else
-              -- decrement coord value
-              jump_coords[target_parts[2]] = jump_coords[target_parts[2]] - 1
+              if target_parts[4] == 'int' then
+                delta = delta + 1
+              end 
+              if target_parts[4] == 'dml' then
+                delta = delta + 0.1
+              end
+              if target_parts[4] == 'hnd' then
+                delta = delta - 0.001
+              end
+            else 
+              if target_parts[4] == 'int' then
+                delta = delta - 1
+              end 
+              if target_parts[4] == 'dml' then
+                delta = delta - 0.1
+              end
+              if target_parts[4] == 'hnd' then
+                delta = delta - 0.001
+              end
             end
-
-            -- update display
-            disp_url = '/cel/nav/' .. target_parts[1] .. target_parts[2]
+            jump_coords[target_parts[2]] = jump_coords[target_parts[2]] + delta
+            disp_url = '/cel/jnav/' .. target_parts[1] .. target_parts[2]
             socket.udp():sendto(osc.pack(disp_url, jump_coords[target_parts[2]]), client_ip, client_port)
-
           end
         end
 
         -- perform hyperspace jump
-        if url == '/cel/nav/jump' and intx == 1 then
-
+        if url == '/cel/jnav/jump' and intx == 1 then
           pos = celestia:newposition((jump_coords['x'] + (20000/uly_to_km)), jump_coords['y'], jump_coords['z'])
-          obs:goto(pos, 3.0)
-
+          celestia:select(pos)
+          obs:goto(pos, 2.0)
           -- wait for "jump" to complete
-          wait(3.0)
-
+          wait(2.0)
         end
-
-    -- end if data
     end
 
     if do_left ~= 0 then
