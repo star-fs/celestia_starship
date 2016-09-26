@@ -1,6 +1,6 @@
 function flash(message)
-   celestia:flash(message)
-   wait(0)
+  celestia:flash(message)
+  wait(0)
 end
 
 celestia:requestsystemaccess()
@@ -21,9 +21,7 @@ udp:settimeout(0)
 
 -- state vars
 local planets = {}
-
 local jump_coords = {x = 0, y = 0, z = 0}
-
 local speed_multi = 1
 
 local left_rot_step = math.rad(90) / 30
@@ -37,31 +35,25 @@ local y_vector = celestia:newvector(0,1,0)
 local z_vector = celestia:newvector(0,0,1)
 
 local uly_to_km = 9460730.4725808
-
 local flight_time_s = 10.0
-
 local time_at_target_s = 20.0
-
 local time_speed = 1
+local invert_xy = false
 
 -- functions 
- 
 function visit_planets (vplanets)
   for k,v in pairs(vplanets) do
-
     if v ~= "" then 
-
       if v == "sol" then 
         planet = celestia:find("Sol")
       else
         planet = celestia:find(v)
       end
-
       obs = celestia:getobserver()
       obs:setframe(celestia:newframe("universal"))
-
       celestia:select(planet)
       obs:goto(planet, flight_time_s)
+      wait(flight_time_s)
       wait(time_at_target_s)
     end
   end
@@ -74,25 +66,27 @@ end
 
 -- http://stackoverflow.com/questions/1426954/split-string-in-lua
 function split(pString, pPattern)
-   if #pString == 0 then
+  if #pString == 0 then
     return ""
-   end
-   local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
-   local fpat = "(.-)" .. pPattern
-   local last_end = 1
-   local s, e, cap = pString:find(fpat, 1)
-   while s do
-      if s ~= 1 or cap ~= "" then
+  end
+  
+  local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
+  local fpat = "(.-)" .. pPattern
+  local last_end = 1
+  local s, e, cap = pString:find(fpat, 1)
+  while s do
+    if s ~= 1 or cap ~= "" then
       table.insert(Table,cap)
-      end
-      last_end = e+1
-      s, e, cap = pString:find(fpat, last_end)
-   end
-   if last_end <= #pString then
-      cap = pString:sub(last_end)
-      table.insert(Table, cap)
-   end
-   return Table
+    end
+    last_end = e+1
+    s, e, cap = pString:find(fpat, last_end)
+  end
+    
+  if last_end <= #pString then
+    cap = pString:sub(last_end)
+    table.insert(Table, cap)
+  end
+  return Table
 end
 
 function toInt(s) 
@@ -100,7 +94,6 @@ function toInt(s)
 end 
 
 -- server main loop
-
 jmpx = 0
 jmpy = 0
 jmpz = 0
@@ -110,212 +103,268 @@ client_port = 9000
 
 time_from_last = gettimeofday()
 
+init_run = false
+
 while true do
+  data, client_ip, send_port = udp:receivefrom(4096)
+  now = gettimeofday()
+  elapsed = timersub(now, time_from_last)
+  elapsed_in_ms = elapsed.sec * 1000 + elapsed.usec / 1000
 
-    data, client_ip, send_port = udp:receivefrom(4096)
+  if elapsed_in_ms < 200 then
+    -- data = false
+  else
 
-    now = gettimeofday()
-    elapsed = timersub(now, time_from_last)
-    elapsed_in_ms = elapsed.sec * 1000 + elapsed.usec / 1000
+  if data then
 
-    if elapsed_in_ms < 200 then
-      -- data = false
-    else 
-      time_from_last = gettimeofday()
+    obs = celestia:getobserver()
+    obs:setframe(celestia:newframe("universal"))
+    url, intx, inty = osc.unpack(data)
+
+    if init_run == false then
+      socket.udp():sendto(osc.pack('/cel/jnav/jmpx', jump_coords["x"]), client_ip, client_port) 
+      socket.udp():sendto(osc.pack('/cel/jnav/jmpy', jump_coords["y"]), client_ip, client_port) 
+      socket.udp():sendto(osc.pack('/cel/jnav/jmpz', jump_coords["z"]), client_ip, client_port) 
+      socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+      socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
+      socket.udp():sendto(osc.pack('/cel/xy1', 0, 0), client_ip, client_port)
+      socket.udp():sendto(osc.pack('/cel/time', 0.5), client_ip, client_port)
+      init_run = true
     end
 
-    if data then
-       
-        obs = celestia:getobserver()
-        obs:setframe(celestia:newframe("universal"))
+    if intx then
+      flash(url .. ":" .. intx)
+    end
 
-        url, intx, inty = osc.unpack(data)
+    -- inc/dec x/y/z for hyperspace jump
+    if string.find(url, "/cel/jnav/jmp") then
 
-        if inty then
-          flash("osc: " .. url .. " --> " .. intx .. "/" .. inty)
-        else
-          if intx then
-            flash("osc: " .. url .. " --> " .. intx)
-          else 
-            intx = 0
-          end
-        end
-
-        socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
-        socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
-
-        socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
-
-        -- handle manual x/y control
-        if url == "/cel/xy1" then
-          rot = celestia:newrotation(x_vector, math.rad(intx / 90))
-          obs:rotate(rot)
-          rot = celestia:newrotation(y_vector, math.rad(inty / -90))
-          obs:rotate(rot)
-
-          -- reset display
-          socket.udp():sendto(osc.pack('/cel/xy1', 0, 0), client_ip, client_port)
-
-        end
-
-        -- speed control
-        if url == "/cel/speed" then
-          uly_to_km = 9460730.4725808
-          obs:setspeed((intx * speed_multi)/uly_to_km)
-        end
-
-        -- speed multi
-        if string.find(url, "/cel/smulti/") then
+      if intx == 1 then
+        while intx ~= 0 do
           url_parts = split(url, "/")
-          speed_multi = toInt(url_parts[3])
-          if speed_multi == 1 then
-            speed_multi = 0.001
+          target_parts = split(url_parts[3], "_")
+          delta = 0
+
+          if target_parts[3] == "inc" then
+            if target_parts[4] == 'int' then
+              delta = delta + 1
+            end
+            if target_parts[4] == 'dml' then
+              delta = delta + 0.1
+            end
+            if target_parts[4] == 'hnd' then
+              delta = delta - 0.001
+            end
+          else
+            if target_parts[4] == 'int' then
+              delta = delta - 1
+            end 
+            if target_parts[4] == 'dml' then
+              delta = delta - 0.1
+            end
+            if target_parts[4] == 'hnd' then
+              delta = delta - 0.001
+            end
           end
-          if speed_multi == 2 then
-            speed_multi = 1
+
+          jump_coords[target_parts[2]] = jump_coords[target_parts[2]] + delta
+          disp_url = '/cel/jnav/' .. target_parts[1] .. target_parts[2]
+          flash(disp_url .. " " .. jump_coords[target_parts[2]])
+          socket.udp():sendto(osc.pack(disp_url, jump_coords[target_parts[2]]), client_ip, client_port)
+          wait(0.025)
+
+          data, client_ip, send_port = udp:receivefrom(4096)
+ 
+          if data then
+            url, intx, inty = osc.unpack(data)
+            if intx then
+              flash("osc: " .. url .. " --> " .. intx)
+            else 
+              intx = 0
+            end
           end
-          if speed_multi == 3 then
-            speed_multi = 10
-          end
-          if speed_multi == 4 then
-            speed_multi = 100
-          end
-          if speed_multi == 5 then
-            speed_multi = 1000
+
+        end
+      end
+      socket.udp():sendto(osc.pack(disp_url, jump_coords[target_parts[2]]), client_ip, client_port)
+    end
+ 
+    -- time speed
+    if url == "/cel/time" then
+      time_speed = (intx - 0.5) * 1000
+      celestia:settimescale(time_speed)
+      flash(time_speed)
+    end 
+
+    if url == "/cel/zero_time" and intx == 1 then
+      celestia:settimescale(1)
+      socket.udp():sendto(osc.pack("/cel/time", 0.5), client_ip, client_port)
+    end
+
+    if url == "/cel/toggle_xy" then 
+      if intx == 1 then
+        inverse_xy = true
+      else 
+        inverse_xy = false
+      end
+    end 
+ 
+    -- handle manual x/y control
+    if url == "/cel/xy1" then
+
+      if inverse_xy then
+        intx = intx * -1
+        inty = inty * -1
+      end
+
+      rot = celestia:newrotation(x_vector, math.rad(intx / 90))
+      obs:rotate(rot)
+      rot = celestia:newrotation(y_vector, math.rad(inty / -90))
+      obs:rotate(rot)
+
+      -- reset display
+      socket.udp():sendto(osc.pack('/cel/xy1', 0, 0), client_ip, client_port)
+    end
+
+    -- speed control
+    if url == "/cel/speed" then
+      obs:setspeed((intx * speed_multi)/uly_to_km)
+    end
+
+    -- speed multi
+    if string.find(url, "/cel/smulti/") then
+      url_parts = split(url, "/")
+      speed_multi = toInt(url_parts[3])
+      if speed_multi == 1 then
+        speed_multi = 0.001
+      end
+      if speed_multi == 2 then
+        speed_multi = 1
+      end
+      if speed_multi == 3 then
+        speed_multi = 10
+      end
+      if speed_multi == 4 then
+        speed_multi = 100
+      end
+      if speed_multi == 5 then
+        speed_multi = 1000
+      end
+      if speed_multi == 6 then
+        speed_multi = 1000000
+      end
+    end 
+
+    -- rotate left
+    if url == "/cel/rot_l" then
+      do_left = intx
+    end
+
+    -- rotate right
+    if url == "/cel/rot_r" then
+      do_right = intx
+    end
+
+    -- set planet state
+    if string.find(url, "/cel/nav/") and not string.find(url, "jmp") and not string.find(url, "jump") then
+      if intx == 0 then
+        if url ~= "/cel/nav/event/go" then
+          url_parts = split(url, "/")
+
+          -- remove the planet from the itenerary
+          for i, v in ipairs (planets) do
+            if v == url_parts[3] then
+              flash("removed " .. url_parts[3] .. " from itenerary.")
+              planets[i] = ""
+            end
           end
         end 
+      end
 
-        -- rotate left
-        if url == "/cel/rot_l" then
-          do_left = intx
-        end
-
-        -- rotate right
-        if url == "/cel/rot_r" then
-          do_right = intx
-        end
-  
-        -- set planet state
-        if string.find(url, "/cel/nav/") and not string.find(url, "jmp") and not string.find(url, "jump") then
-          if intx == 0 then
-            if url ~= "/cel/nav/event/go" then
-              url_parts = split(url, "/")
-              -- remove the planet from the itenerary
-              for i, v in ipairs (planets) do
-                if v == url_parts[3] then
-                  flash("removed " .. url_parts[3] .. " from itenerary.")
-                  planets[i] = ""
-                end
-              end
-            end 
-          end
-
-          if intx == 1 then
-            if url ~= "/cel/nav/event/go" then
-              url_parts = split(url, "/")
-              flash("scheduling trip to:" .. url_parts[3])
-              planets[#planets + 1] = url_parts[3]
-
-              -- display target info
-              uly_to_km = 9460730.4725808
-
-              -- Set frame of reference to "universal"
-              obs = celestia:getobserver()
-              obs:setframe(celestia:newframe("universal"))
-
-              -- Find and select target
-              targ = celestia:find("Sol/" .. url_parts[3])
-              celestia:select(targ)
-
-              -- print actual position of target
-              tnow = celestia:gettime()
-              pos = targ:getposition(tnow)
-              pos_x = pos:getx()
-              pos_y = pos:gety()
-              pos_z = pos:getz()
-
-              celestia:print(
-                "Actual position of " .. url_parts[3] .. ":\nX = " .. pos_x .. 
-                "\nY = " .. pos_y .. "\nZ = " ..  pos_z, 15, -1, -1, 1, 6
-              )
-
-            else 
-              flash("starting autopilot ... ")
-              visit_planets(planets)
-              planets = {}
-            end
-          end
-        end
-
-        -- handle label events (aka nav aids)
-        if string.find(url, "/cel/disp/") then
+      if intx == 1 then
+        if url ~= "/cel/nav/event/go" then
           url_parts = split(url, "/")
-          if intx == 1 then
-            celestia:show(url_parts[3])
-          else 
-            celestia:hide(url_parts[3])
-          end
-        end
+          flash("scheduling trip to:" .. url_parts[3])
+          planets[#planets + 1] = url_parts[3]
 
-        -- inc/dec/ time of flight secs
-        if url == "/cel/autop/fts_inc" and intx == 1 then
-          flight_time_s = flight_time_s + 1
-          socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
-        end
-        if url == "/cel/autop/fts_dec" and intx == 1 then
-          flight_time_s = flight_time_s - 1
-          socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
-        end
-        if url == "/cel/autop/tats_inc" and intx == 1 then
-          time_at_target_s = time_at_target_s + 1
-          socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
-        end
-        if url == "/cel/autop/tats_dec" and intx == 1 then
-          time_at_target_s = time_at_target_s - 1
-          socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
-        end
+          -- display target info
+          uly_to_km = 9460730.4725808
 
-        -- inc/dec x/y/z for hyperspace jump
-        if string.find(url, "/cel/jnav/jmp") then
-          if intx == 1 then
-            url_parts = split(url, "/")
-            target_parts = split(url_parts[3], "_")
-            delta = 0
-            if target_parts[3] == "inc" then
-              if target_parts[4] == 'int' then
-                delta = delta + 1
-              end 
-              if target_parts[4] == 'dml' then
-                delta = delta + 0.1
-              end
-              if target_parts[4] == 'hnd' then
-                delta = delta - 0.001
-              end
-            else 
-              if target_parts[4] == 'int' then
-                delta = delta - 1
-              end 
-              if target_parts[4] == 'dml' then
-                delta = delta - 0.1
-              end
-              if target_parts[4] == 'hnd' then
-                delta = delta - 0.001
-              end
-            end
-            jump_coords[target_parts[2]] = jump_coords[target_parts[2]] + delta
-            disp_url = '/cel/jnav/' .. target_parts[1] .. target_parts[2]
-            socket.udp():sendto(osc.pack(disp_url, jump_coords[target_parts[2]]), client_ip, client_port)
-          end
-        end
+          -- Set frame of reference to "universal"
+          obs = celestia:getobserver()
+          obs:setframe(celestia:newframe("universal"))
 
-        -- perform hyperspace jump
-        if url == '/cel/jnav/jump' and intx == 1 then
-          pos = celestia:newposition((jump_coords['x'] + (20000/uly_to_km)), jump_coords['y'], jump_coords['z'])
-          celestia:select(pos)
-          obs:goto(pos, 2.0)
-          -- wait for "jump" to complete
-          wait(2.0)
+          -- Find and select target
+          targ = celestia:find("Sol/" .. url_parts[3])
+          celestia:select(targ)
+
+          -- print actual position of target
+          tnow = celestia:gettime()
+          pos = targ:getposition(tnow)
+          pos_x = pos:getx()
+          pos_y = pos:gety()
+          pos_z = pos:getz()
+
+          celestia:print(
+            "Actual position of " .. url_parts[3] .. ":\nX = " .. pos_x .. 
+            "\nY = " .. pos_y .. "\nZ = " ..  pos_z, 15, -1, -1, 1, 6
+          )
+
+        else 
+          flash("starting autopilot ... ")
+          visit_planets(planets)
+          planets = {}
         end
+      end
+    end
+
+    -- handle label events (aka nav aids)
+      if string.find(url, "/cel/disp/") then
+        url_parts = split(url, "/")
+        if intx == 1 then
+          celestia:show(url_parts[3])
+        else 
+          celestia:hide(url_parts[3])
+        end
+      end
+
+      -- inc/dec time of flight secs
+      send_fts = false
+      send_tats = false
+      if url == "/cel/autop/fts_inc" and intx == 1 then
+        flight_time_s = flight_time_s + 1
+        send_fts = true
+      end
+      if url == "/cel/autop/fts_dec" and intx == 1 then
+        flight_time_s = flight_time_s - 1
+        send_fts = true
+      end
+      if url == "/cel/autop/tats_inc" and intx == 1 then
+        time_at_target_s = time_at_target_s + 1
+        send_tats = true
+      end
+      if url == "/cel/autop/tats_dec" and intx == 1 then
+        time_at_target_s = time_at_target_s - 1
+        send_tats = true
+      end
+      if send_fts == true then
+        socket.udp():sendto(osc.pack("/cel/autop/fts", flight_time_s), client_ip, client_port)
+      end
+      if send_tats == true then
+        socket.udp():sendto(osc.pack("/cel/autop/tats", time_at_target_s), client_ip, client_port)
+      end
+      send_fts = false
+      send_tats = false
+
+      -- perform hyperspace jump
+      if url == '/cel/jnav/jump' and intx == 1 then
+        pos = celestia:newposition((jump_coords['x'] + (20000/uly_to_km)), jump_coords['y'], jump_coords['z'])
+        celestia:select(pos)
+        obs:goto(pos, 2.0)
+        -- wait for "jump" to complete
+        wait(2.0)
+      end
+
     end
 
     if do_left ~= 0 then
@@ -332,5 +381,5 @@ while true do
 
     -- socket.sleep(0.01)
     wait(0)
-
+  end
 end
